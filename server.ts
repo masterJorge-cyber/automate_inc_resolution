@@ -59,6 +59,11 @@ async function startServer() {
 
     const page: Page = context.pages().length > 0 ? context.pages()[0] : await context.newPage();
     
+    if (visible) {
+      await page.bringToFront();
+      sendLog('Modo Debug: Navegador em primeiro plano.');
+    }
+    
     sendLog(`Acessando URL: ${url}`);
     await page.goto(url, { waitUntil: 'load', timeout: 60000 });
 
@@ -98,6 +103,9 @@ async function startServer() {
     await searchIcon.waitFor({ state: 'visible', timeout: 30000 });
     await searchIcon.click();
     
+    // Aguardar o campo de busca estar pronto
+    await page.waitForLoadState('networkidle').catch(() => {});
+    
     sendLog('Campo de busca aberto. Inserindo INC...');
     const searchInput = page.locator('input#sysparm_search');
     await searchInput.waitFor({ state: 'visible', timeout: 10000 });
@@ -125,23 +133,92 @@ async function startServer() {
     sendLog('Preenchendo campos de resolução...');
     
     // IC Impactado
-    await frame.locator('input#sys_display\\.incident\\.cmdb_ci').fill('Oracle Retail - SIM');
+    const icInput = frame.locator('input#sys_display\\.incident\\.cmdb_ci');
+    await icInput.waitFor({ state: 'visible', timeout: 10000 });
+    await icInput.fill('Oracle Retail - SIM');
     await page.keyboard.press('Tab');
+    await page.waitForTimeout(1000);
+
+    // Função auxiliar para selecionar opção tentando label ou valor
+    const safeSelect = async (selector: string, optionLabel: string, logMsg: string) => {
+      try {
+        sendLog(`Selecionando ${logMsg}: ${optionLabel}`);
+        const select = frame.locator(selector);
+        
+        // Esperar o elemento estar presente e visível
+        await select.waitFor({ state: 'visible', timeout: 10000 });
+        
+        // Tentar por label (com e sem acento), por valor e por regex
+        try {
+          await select.selectOption({ label: optionLabel });
+        } catch (e) {
+          try {
+            // Tentar versão sem acento se falhar
+            const normalizedLabel = optionLabel.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            await select.selectOption({ label: normalizedLabel });
+          } catch (e2) {
+            try {
+              await select.selectOption({ value: optionLabel });
+            } catch (e3) {
+              try {
+                // Tentar por regex (case-insensitive)
+                await select.selectOption({ label: new RegExp(optionLabel, 'i') });
+              } catch (e4) {
+                // Se tudo falhar, tentar selecionar o primeiro item que contenha o texto
+                sendLog(`Aviso: Tentando selecionar por índice para ${logMsg} como último recurso`);
+                await select.selectOption({ index: 1 }); // Geralmente o primeiro item após o vazio
+              }
+            }
+          }
+        }
+        sendLog(`${logMsg} selecionado.`);
+        await page.waitForTimeout(800); // Pequena pausa para scripts de tela (onChange)
+      } catch (err: any) {
+        sendLog(`ERRO CRÍTICO ao selecionar ${logMsg}: ${err.message}`);
+        // Tirar screenshot se der erro no debug
+        if (visible) {
+          await page.screenshot({ path: `error_${logMsg.replace(/\s+/g, '_')}.png` });
+        }
+      }
+    };
 
     // Código de Resolução: 'Resolvido'
-    await frame.locator('select#incident\\.close_code').selectOption({ label: 'Resolvido' });
+    await safeSelect('select#incident\\.close_code', 'Resolvido', 'Código de Resolução');
+    
+    // Aguardar possíveis recarregamentos parciais (AJAX)
+    await page.waitForLoadState('networkidle').catch(() => {});
+    await page.waitForTimeout(1000);
 
-    // Causa Raiz Identificada: 'Nao'
-    await frame.locator('select#incident\\.u_causa_raiz_identificada').selectOption({ label: 'Nao' });
+    // Causa Raiz Identificada: 'Não' ou 'Nao'
+    // Tentar encontrar o campo de causa raiz (pode variar o ID)
+    let causaRaizSelector = 'select#incident\\.u_causa_raiz_identificada';
+    if (!(await frame.locator(causaRaizSelector).isVisible())) {
+      causaRaizSelector = 'select[id*="causa_raiz"]'; // Seletor mais genérico se o ID exato falhar
+    }
+    await safeSelect(causaRaizSelector, 'Não', 'Causa Raiz Identificada');
+
+    // Se houver um campo de "Causa Raiz não identificada" (texto ou select)
+    const causaRaizNaoIdentificada = frame.locator('select#incident\\.u_causa_raiz_nao_identificada, input#incident\\.u_causa_raiz_nao_identificada, textarea#incident\\.u_causa_raiz_nao_identificada');
+    if (await causaRaizNaoIdentificada.isVisible()) {
+      sendLog('Campo Causa Raiz não identificada detectado. Preenchendo...');
+      try {
+        const tagName = await causaRaizNaoIdentificada.evaluate(el => el.tagName.toLowerCase());
+        if (tagName === 'select') {
+          await safeSelect('select#incident\\.u_causa_raiz_nao_identificada', 'Outros', 'Causa Raiz não identificada');
+        } else {
+          await causaRaizNaoIdentificada.fill('Causa não identificada no momento do encerramento.');
+        }
+      } catch (e) {}
+    }
 
     // Classe de Falha: 'Aplicação'
-    await frame.locator('select#incident\\.u_classe_falha').selectOption({ label: 'Aplicação' });
+    await safeSelect('select#incident\\.u_classe_falha', 'Aplicação', 'Classe de Falha');
 
     // Tipo de Falha: 'Erro de Software'
-    await frame.locator('select#incident\\.u_tipo_falha').selectOption({ label: 'Erro de Software' });
+    await safeSelect('select#incident\\.u_tipo_falha', 'Erro de Software', 'Tipo de Falha');
 
     // Resolução: 'Reprocessamento'
-    await frame.locator('select#incident\\.u_resolucao').selectOption({ label: 'Reprocessamento' });
+    await safeSelect('select#incident\\.u_resolucao', 'Reprocessamento', 'Resolução');
 
     // 7. Campo Especial (Impacto no Negócio)
     sendLog('Tratando campo Impacto no Negócio...');

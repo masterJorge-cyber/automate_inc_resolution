@@ -144,9 +144,14 @@ export default function App() {
               </div>
               <label htmlFor="debug" className="text-xs font-semibold text-slate-600 flex items-center gap-2 cursor-pointer">
                 {debug ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-                Modo Debug (Visível)
+                Modo Debug (Navegador Visível)
               </label>
             </div>
+            {debug && (
+              <p className="text-[10px] text-amber-600 font-medium px-1">
+                * O navegador abrirá em uma janela separada.
+              </p>
+            )}
 
             <button
               type="submit"

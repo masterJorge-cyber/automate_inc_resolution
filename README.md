@@ -1,11 +1,45 @@
-<div align="center">
+# Automador ServiceNow
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+Este projeto automatiza o encerramento de incidentes no ServiceNow.
 
-  <h1>Built with AI Studio</h2>
+## Como rodar localmente
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+Se você baixou o projeto e está tentando rodar no seu computador, siga estes passos:
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
+### 1. Instalar dependências
+Abra o terminal na pasta do projeto e rode:
+```bash
+npm install
+```
 
-</div>
+### 2. Instalar o Playwright (Navegadores)
+O Playwright precisa baixar os navegadores para funcionar:
+```bash
+npx playwright install chromium
+```
+
+### 3. Rodar o projeto
+Existem duas formas de rodar:
+
+#### Modo Desenvolvimento (Recomendado para uso local)
+Este modo não exige que você compile o frontend manualmente. Ele usa o Vite para servir os arquivos em tempo real.
+```bash
+npm run dev
+```
+O servidor estará disponível em `http://localhost:3000`.
+
+#### Modo Produção
+Se você quiser rodar como se estivesse em um servidor real, precisa compilar primeiro:
+```bash
+npm run build
+npm start
+```
+
+## Erro "ENOENT: no such file or directory, stat ... dist\index.html"
+Este erro acontece porque a pasta `dist` (onde fica o site compilado) não existe. 
+Para resolver:
+1. Use `npm run dev` em vez de `npm start`.
+2. Ou rode `npm run build` antes de rodar `npm start`.
+
+## Configurações
+As credenciais e URLs estão configuradas no arquivo `server.ts`. Certifique-se de que seu usuário tem as permissões necessárias no ServiceNow.

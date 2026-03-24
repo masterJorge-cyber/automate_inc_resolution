@@ -1,0 +1,5 @@
+{
+  "name": "Automador ServiceNow",
+  "description": "Aplicação para automação de encerramento de incidentes no ServiceNow usando FastAPI e Playwright.",
+  "requestFramePermissions": []
+}

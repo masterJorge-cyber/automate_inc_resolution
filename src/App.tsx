@@ -17,30 +17,40 @@ export default function App() {
   const logContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    console.log('Automador: Inicializando EventSource');
     const eventSource = new EventSource('/api/logs');
     
     eventSource.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (logContainerRef.current) {
-        const logLine = document.createElement('div');
-        logLine.className = "flex gap-2 border-b border-slate-900/50 pb-0.5 mb-0.5 last:border-0 animate-in fade-in slide-in-from-left-1 duration-300";
-        
-        const timeStr = new Date(data.timestamp).toLocaleTimeString([], { hour12: false });
-        const isError = data.message.startsWith('ERRO');
-        
-        logLine.innerHTML = `
-          <span class="text-slate-500 shrink-0">[${timeStr}]</span>
-          <span class="break-words ${isError ? 'text-red-400 font-bold' : 'text-blue-300'}">
-            ${data.message}
-          </span>
-        `;
-        
-        logContainerRef.current.appendChild(logLine);
-        logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+      try {
+        const data = JSON.parse(event.data);
+        if (logContainerRef.current) {
+          const logLine = document.createElement('div');
+          logLine.className = "flex gap-2 border-b border-slate-900/50 pb-0.5 mb-0.5 last:border-0 animate-in fade-in slide-in-from-left-1 duration-300";
+          
+          const timeStr = new Date(data.timestamp).toLocaleTimeString([], { hour12: false });
+          const isError = data.message.startsWith('ERRO');
+          
+          logLine.innerHTML = `
+            <span class="text-slate-500 shrink-0">[${timeStr}]</span>
+            <span class="break-words ${isError ? 'text-red-400 font-bold' : 'text-blue-300'}">
+              ${data.message}
+            </span>
+          `;
+          
+          logContainerRef.current.appendChild(logLine);
+          logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+        }
+      } catch (e) {
+        console.error('Erro ao processar log:', e);
       }
     };
 
+    eventSource.onerror = (err) => {
+      console.error('EventSource falhou:', err);
+    };
+
     return () => {
+      console.log('Automador: Fechando EventSource');
       eventSource.close();
     };
   }, []);

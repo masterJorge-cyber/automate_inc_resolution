@@ -117,36 +117,36 @@ async function startServer() {
     
     // 4. Ação Inicial: Clicar no botão 'Assumir'
     sendLog('Aguardando carregamento do incidente...');
-    await page.waitForLoadState('networkidle').catch(() => {});
+    await page.waitForLoadState('domcontentloaded').catch(() => {});
+    await page.waitForTimeout(2000);
     
     try {
-      // Tentar múltiplos seletores para o botão Assumir
       const assumirSelectors = [
         'button#assign_to_me',
+        'button[id="assign_to_me"]',
         'button:has-text("Assumir")',
         'button:has-text("Assign to me")',
         'button[name="assign_to_me"]',
-        'a:has-text("Assumir")',
-        'a#assign_to_me'
+        '#sysverb_assign_to_me'
       ];
       
       let clicked = false;
       for (const selector of assumirSelectors) {
         const btn = frame.locator(selector).first();
         if (await btn.isVisible()) {
+          sendLog(`Clicando em Assumir (${selector})...`);
           await btn.click();
-          sendLog(`Botão Assumir (${selector}) clicado.`);
           clicked = true;
           break;
         }
       }
       
-      if (!clicked) {
-        sendLog('Botão Assumir não encontrado ou já assumido.');
+      if (clicked) {
+        sendLog('Botão Assumir clicado. Aguardando atualização...');
+        await page.waitForLoadState('domcontentloaded').catch(() => {});
+        await page.waitForTimeout(3000);
       } else {
-        // Aguardar recarregamento após assumir
-        await page.waitForLoadState('networkidle').catch(() => {});
-        await page.waitForTimeout(2000);
+        sendLog('Botão Assumir não encontrado ou já assumido.');
       }
     } catch (e) {
       sendLog('Erro ao tentar clicar em Assumir.');
@@ -237,7 +237,18 @@ async function startServer() {
       }
     };
 
-    // 5. Preenchimento de Campos (Ordem solicitada)
+    // 5. Navegação Interna: Clicar na aba "Informações de Fechamento"
+    try {
+      sendLog('Acessando aba Informações de Fechamento...');
+      const tabFechamento = frame.locator('span.tab_caption_text:has-text("Informações de Fechamento")');
+      await tabFechamento.waitFor({ state: 'visible', timeout: 5000 });
+      await tabFechamento.click();
+      await page.waitForTimeout(1000);
+    } catch (e) {
+      sendLog('Aviso: Não foi possível clicar na aba de fechamento.');
+    }
+
+    // 6. Preenchimento de Campos (Ordem solicitada)
     sendLog('Iniciando preenchimento dos campos...');
 
     // IC Impactado (Oracle Retail - SIM)
@@ -247,26 +258,16 @@ async function startServer() {
         sendLog('Preenchendo IC Impactado: Oracle Retail - SIM');
         await icInput.clear();
         await icInput.fill('Oracle Retail - SIM');
-        await page.waitForTimeout(500);
-        await page.keyboard.press('Enter');
         await page.waitForTimeout(1000);
+        await page.keyboard.press('Enter');
+        await page.waitForTimeout(1500);
       }
     } catch (e) {
       sendLog('Aviso: Campo IC Impactado não encontrado.');
     }
 
-    // Navegação Interna: Clicar na aba "Informações de Fechamento"
-    try {
-      const tabFechamento = frame.locator('span.tab_caption_text:has-text("Informações de Fechamento")');
-      if (await tabFechamento.isVisible()) {
-        await tabFechamento.click();
-        await page.waitForTimeout(500);
-      }
-    } catch (e) {}
-
     // Código de Resolução: 'Resolvido'
     await safeSelect('select#incident\\.close_code', 'Resolvido', 'Código de Resolução');
-    await page.waitForLoadState('networkidle').catch(() => {});
     await page.waitForTimeout(1000);
 
     // Causa Raiz Identificada: 'Não'
@@ -286,21 +287,36 @@ async function startServer() {
     await fillSmartField('u_resolucao', 'Reprocessamento', 'Resolução', true);
 
     // Houve impacto no negócio?
-    sendLog('Tratando campo Impacto no Negócio...');
-    const unlockBtn = frame.locator('#incident\\.u_kdl_houve_impacto_no_neg_cio_unlock');
-    if (await unlockBtn.isVisible()) {
-      await unlockBtn.click();
-      const impactSelect = frame.locator('select#choice\\.incident\\.u_kdl_houve_impacto_no_neg_cio');
-      try {
-        await impactSelect.selectOption({ label: 'NÃO' });
-      } catch (e) {
-        await impactSelect.selectOption({ index: 0 });
+    try {
+      sendLog('Tratando campo Impacto no Negócio...');
+      const unlockBtn = frame.locator('#incident\\.u_kdl_houve_impacto_no_neg_cio_unlock');
+      if (await unlockBtn.isVisible()) {
+        await unlockBtn.click();
+        await page.waitForTimeout(500);
+        const impactSelect = frame.locator('select#choice\\.incident\\.u_kdl_houve_impacto_no_neg_cio');
+        try {
+          await impactSelect.selectOption({ label: 'NÃO' });
+        } catch (e) {
+          await impactSelect.selectOption({ index: 0 });
+        }
+      } else {
+        const impactSelect = frame.locator('select#choice\\.incident\\.u_kdl_houve_impacto_no_neg_cio, select[id*="impacto_no_neg_cio"]');
+        if (await impactSelect.isVisible()) {
+          await impactSelect.selectOption({ label: 'NÃO' });
+        }
       }
+    } catch (e) {
+      sendLog('Aviso: Falha ao tratar Impacto no Negócio.');
     }
 
     // Descrição da Resolução
     sendLog('Inserindo justificativa...');
-    await frame.locator('textarea#incident\\.close_notes').fill(justificativa);
+    try {
+      const closeNotes = frame.locator('textarea#incident\\.close_notes');
+      await closeNotes.fill(justificativa);
+    } catch (e) {
+      sendLog('Erro ao preencher Descrição da Resolução.');
+    }
 
     // Salvar/Resolver
     // await frame.locator('button#resolve_incident').click();

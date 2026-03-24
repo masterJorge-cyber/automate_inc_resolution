@@ -31,7 +31,9 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (logEndRef.current) {
+      logEndRef.current.scrollIntoView({ behavior: 'auto' });
+    }
   }, [logs]);
 
   const handleFinalizar = async (e: React.FormEvent) => {
@@ -180,9 +182,9 @@ export default function App() {
                 <div className="text-slate-600 italic">Aguardando início...</div>
               )}
               {logs.map((log, i) => (
-                <div key={i} className="flex gap-2">
-                  <span className="text-slate-500">[{new Date(log.timestamp).toLocaleTimeString()}]</span>
-                  <span className={log.message.startsWith('ERRO') ? 'text-red-400' : 'text-blue-300'}>
+                <div key={`${log.timestamp}-${i}`} className="flex gap-2 border-b border-slate-900/50 pb-0.5 mb-0.5 last:border-0">
+                  <span className="text-slate-500 shrink-0">[{new Date(log.timestamp).toLocaleTimeString([], { hour12: false })}]</span>
+                  <span className={`break-words ${log.message.startsWith('ERRO') ? 'text-red-400' : 'text-blue-300'}`}>
                     {log.message}
                   </span>
                 </div>

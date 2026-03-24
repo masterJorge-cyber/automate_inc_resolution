@@ -59,9 +59,9 @@ async function startServer() {
 
     const page: Page = context.pages().length > 0 ? context.pages()[0] : await context.newPage();
     
+    // Removido bringToFront para evitar roubo de foco constante da UI
     if (visible) {
-      await page.bringToFront();
-      sendLog('Modo Debug: Navegador em primeiro plano.');
+      sendLog('Modo Debug: Navegador iniciado.');
     }
     
     sendLog(`Acessando URL: ${url}`);
@@ -174,11 +174,48 @@ async function startServer() {
         sendLog(`${logMsg} selecionado.`);
         await page.waitForTimeout(800); // Pequena pausa para scripts de tela (onChange)
       } catch (err: any) {
-        sendLog(`ERRO CRÍTICO ao selecionar ${logMsg}: ${err.message}`);
-        // Tirar screenshot se der erro no debug
-        if (visible) {
-          await page.screenshot({ path: `error_${logMsg.replace(/\s+/g, '_')}.png` });
+        sendLog(`Aviso ao selecionar ${logMsg}: ${err.message}`);
+      }
+    };
+
+    // Função para preencher campos que podem ser Select ou Referência (Input com lupa)
+    const fillSmartField = async (baseId: string, value: string, logMsg: string) => {
+      try {
+        sendLog(`Tratando campo ${logMsg}...`);
+        const selectSelector = `select#incident\\.${baseId.replace(/\./g, '\\.')}`;
+        const inputSelector = `input#sys_display\\.incident\\.${baseId.replace(/\./g, '\\.')}`;
+        
+        const selectEl = frame.locator(selectSelector);
+        const inputEl = frame.locator(inputSelector);
+
+        if (await selectEl.isVisible()) {
+          await safeSelect(selectSelector, value, logMsg);
+        } else if (await inputEl.isVisible()) {
+          sendLog(`Preenchendo referência ${logMsg}: ${value}`);
+          await inputEl.clear();
+          await inputEl.fill(value);
+          await page.waitForTimeout(500);
+          await page.keyboard.press('Enter');
+          await page.waitForTimeout(1000);
+          sendLog(`${logMsg} preenchido.`);
+        } else {
+          // Tentar busca genérica por ID
+          const generic = frame.locator(`[id*="${baseId}"]`).first();
+          if (await generic.isVisible()) {
+            const tagName = await generic.evaluate(el => el.tagName.toLowerCase());
+            if (tagName === 'select') {
+              await safeSelect(`[id*="${baseId}"]`, value, logMsg);
+            } else {
+              await generic.fill(value);
+              await page.keyboard.press('Tab');
+              await page.waitForTimeout(1000);
+            }
+          } else {
+            sendLog(`Aviso: Campo ${logMsg} não visível.`);
+          }
         }
+      } catch (e: any) {
+        sendLog(`Erro no campo ${logMsg}: ${e.message}`);
       }
     };
 
@@ -212,13 +249,13 @@ async function startServer() {
     }
 
     // Classe de Falha: 'Aplicação'
-    await safeSelect('select#incident\\.u_classe_falha', 'Aplicação', 'Classe de Falha');
+    await fillSmartField('u_classe_falha', 'Aplicação', 'Classe de Falha');
 
     // Tipo de Falha: 'Erro de Software'
-    await safeSelect('select#incident\\.u_tipo_falha', 'Erro de Software', 'Tipo de Falha');
+    await fillSmartField('u_tipo_falha', 'Erro de Software', 'Tipo de Falha');
 
     // Resolução: 'Reprocessamento'
-    await safeSelect('select#incident\\.u_resolucao', 'Reprocessamento', 'Resolução');
+    await fillSmartField('u_resolucao', 'Reprocessamento', 'Resolução');
 
     // 7. Campo Especial (Impacto no Negócio)
     sendLog('Tratando campo Impacto no Negócio...');

@@ -160,14 +160,9 @@ async function startServer() {
             try {
               await select.selectOption({ value: optionLabel });
             } catch (e3) {
-              try {
-                // Tentar por regex (case-insensitive)
-                await select.selectOption({ label: new RegExp(optionLabel, 'i') });
-              } catch (e4) {
-                // Se tudo falhar, tentar selecionar o primeiro item que contenha o texto
-                sendLog(`Aviso: Tentando selecionar por índice para ${logMsg} como último recurso`);
-                await select.selectOption({ index: 1 }); // Geralmente o primeiro item após o vazio
-              }
+              // Se tudo falhar, tentar selecionar o primeiro item que contenha o texto
+              sendLog(`Aviso: Tentando selecionar por índice para ${logMsg} como último recurso`);
+              await select.selectOption({ index: 1 }); // Geralmente o primeiro item após o vazio
             }
           }
         }
@@ -179,7 +174,7 @@ async function startServer() {
     };
 
     // Função para preencher campos que podem ser Select ou Referência (Input com lupa)
-    const fillSmartField = async (baseId: string, value: string, logMsg: string) => {
+    const fillSmartField = async (baseId: string, value: string, logMsg: string, isLookup: boolean = false) => {
       try {
         sendLog(`Tratando campo ${logMsg}...`);
         const selectSelector = `select#incident\\.${baseId.replace(/\./g, '\\.')}`;
@@ -195,7 +190,17 @@ async function startServer() {
           await inputEl.clear();
           await inputEl.fill(value);
           await page.waitForTimeout(500);
-          await page.keyboard.press('Enter');
+          
+          if (isLookup) {
+            // Fluxo específico para Lookup: Digitar e Enter/Tab
+            await page.keyboard.press('Enter');
+            await page.waitForTimeout(1000);
+            // Tentar Tab se Enter não bastar
+            await page.keyboard.press('Tab');
+          } else {
+            await page.keyboard.press('Enter');
+          }
+          
           await page.waitForTimeout(1000);
           sendLog(`${logMsg} preenchido.`);
         } else {
@@ -207,7 +212,7 @@ async function startServer() {
               await safeSelect(`[id*="${baseId}"]`, value, logMsg);
             } else {
               await generic.fill(value);
-              await page.keyboard.press('Tab');
+              await page.keyboard.press(isLookup ? 'Enter' : 'Tab');
               await page.waitForTimeout(1000);
             }
           } else {
@@ -249,13 +254,13 @@ async function startServer() {
     }
 
     // Classe de Falha: 'Aplicação'
-    await fillSmartField('u_classe_falha', 'Aplicação', 'Classe de Falha');
+    await fillSmartField('u_classe_falha', 'Aplicação', 'Classe de Falha', true);
 
-    // Tipo de Falha: 'Erro de Software'
-    await fillSmartField('u_tipo_falha', 'Erro de Software', 'Tipo de Falha');
+    // Tipo de Falha: 'Falha na integração'
+    await fillSmartField('u_tipo_falha', 'Falha na integração', 'Tipo de Falha', true);
 
     // Resolução: 'Reprocessamento'
-    await fillSmartField('u_resolucao', 'Reprocessamento', 'Resolução');
+    await fillSmartField('u_resolucao', 'Reprocessamento', 'Resolução', true);
 
     // 7. Campo Especial (Impacto no Negócio)
     sendLog('Tratando campo Impacto no Negócio...');

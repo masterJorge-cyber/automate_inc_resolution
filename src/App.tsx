@@ -17,12 +17,30 @@ export default function App() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const logEndRef = useRef<HTMLDivElement>(null);
 
+  const logContainerRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     const eventSource = new EventSource('/api/logs');
     
     eventSource.onmessage = (event) => {
-      const newLog = JSON.parse(event.data);
-      setLogs((prev) => [...prev, newLog]);
+      const data = JSON.parse(event.data);
+      if (logContainerRef.current) {
+        const logLine = document.createElement('div');
+        logLine.className = "flex gap-2 border-b border-slate-900/50 pb-0.5 mb-0.5 last:border-0 animate-in fade-in slide-in-from-left-1 duration-300";
+        
+        const timeStr = new Date(data.timestamp).toLocaleTimeString([], { hour12: false });
+        const isError = data.message.startsWith('ERRO');
+        
+        logLine.innerHTML = `
+          <span class="text-slate-500 shrink-0">[${timeStr}]</span>
+          <span class="break-words ${isError ? 'text-red-400 font-bold' : 'text-blue-300'}">
+            ${data.message}
+          </span>
+        `;
+        
+        logContainerRef.current.appendChild(logLine);
+        logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+      }
     };
 
     return () => {
@@ -30,17 +48,15 @@ export default function App() {
     };
   }, []);
 
-  useEffect(() => {
-    if (logEndRef.current) {
-      logEndRef.current.scrollIntoView({ behavior: 'auto' });
-    }
-  }, [logs]);
-
   const handleFinalizar = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setResult(null);
-    setLogs([]); // Clear logs for new run
+    
+    // Limpar logs visualmente
+    if (logContainerRef.current) {
+      logContainerRef.current.innerHTML = '';
+    }
 
     try {
       const response = await fetch('/api/encerrar', {
@@ -177,19 +193,11 @@ export default function App() {
               <span className="text-xs font-bold uppercase tracking-widest">Log de Execução</span>
             </div>
             
-            <div className="flex-1 overflow-y-auto font-mono text-[11px] space-y-1 custom-scrollbar">
-              {logs.length === 0 && !loading && (
-                <div className="text-slate-600 italic">Aguardando início...</div>
-              )}
-              {logs.map((log, i) => (
-                <div key={`${log.timestamp}-${i}`} className="flex gap-2 border-b border-slate-900/50 pb-0.5 mb-0.5 last:border-0">
-                  <span className="text-slate-500 shrink-0">[{new Date(log.timestamp).toLocaleTimeString([], { hour12: false })}]</span>
-                  <span className={`break-words ${log.message.startsWith('ERRO') ? 'text-red-400' : 'text-blue-300'}`}>
-                    {log.message}
-                  </span>
-                </div>
-              ))}
-              <div ref={logEndRef} />
+            <div 
+              ref={logContainerRef}
+              className="flex-1 overflow-y-auto font-mono text-[11px] space-y-1 custom-scrollbar scroll-smooth"
+            >
+              {/* Logs serão anexados aqui via DOM API para evitar re-renders */}
             </div>
 
             <AnimatePresence>

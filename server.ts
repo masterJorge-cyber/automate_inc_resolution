@@ -319,9 +319,38 @@ async function startServer() {
       sendLog('Erro ao preencher Descrição da Resolução.');
     }
 
-    // Salvar/Resolver
-    // await frame.locator('button#resolve_incident').click();
-    // sendLog('Incidente resolvido com sucesso.');
+    // 7. Finalização: Esperar 5s e clicar em Resolver
+    sendLog('Aguardando 5 segundos antes de resolver...');
+    await page.waitForTimeout(5000);
+
+    try {
+      const resolverSelectors = [
+        'button#resolver_inc_bottom',
+        'button[data-action-name="resolver_inc"]',
+        'button:has-text("Resolver")',
+        'button[gsft_id="7590ac9e0f8917003d114f2b42050e3c"]'
+      ];
+      
+      let resolved = false;
+      for (const selector of resolverSelectors) {
+        const btn = frame.locator(selector).first();
+        if (await btn.isVisible()) {
+          sendLog(`Clicando em Resolver (${selector})...`);
+          await btn.click();
+          resolved = true;
+          break;
+        }
+      }
+      
+      if (resolved) {
+        sendLog('Incidente resolvido com sucesso!');
+        await page.waitForTimeout(3000); // Esperar feedback visual
+      } else {
+        sendLog('Aviso: Botão Resolver não encontrado após o preenchimento.');
+      }
+    } catch (e: any) {
+      sendLog(`Erro ao clicar em Resolver: ${e.message}`);
+    }
 
     sendLog('Processo concluído.');
 

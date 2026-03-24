@@ -19,6 +19,7 @@ async function startServer() {
   // API routes go here
   // SSE clients for real-time logs
   let clients: any[] = [];
+  let currentContext: BrowserContext | null = null;
 
   function sendLog(message: string) {
     console.log(message);
@@ -55,6 +56,7 @@ async function startServer() {
       args: ['--no-sandbox', '--disable-setuid-sandbox'],
       viewport: { width: 1280, height: 720 }
     });
+    currentContext = context;
 
     const page: Page = context.pages().length > 0 ? context.pages()[0] : await context.newPage();
     
@@ -277,13 +279,13 @@ async function startServer() {
     await safeSelect(causaRaizSelector, 'Não', 'Causa Raiz Identificada');
 
     // Classe de Falha: 'Aplicação'
-    await fillSmartField('u_classe_falha', 'Aplicação', 'Classe de Falha', true);
+    await fillSmartField('u_classe_de_falha', 'Aplicação', 'Classe de Falha', true);
 
     // Tipo de Falha: 'Falha na integração'
-    await fillSmartField('u_tipo_falha', 'Falha na integração', 'Tipo de Falha', true);
+    await fillSmartField('u_tipo_de_falha', 'Falha na integração', 'Tipo de Falha', true);
 
     // Resolução: 'Reprocessamento'
-    await fillSmartField('u_resolucao', 'Reprocessamento', 'Resolução', true);
+    await fillSmartField('u_resolucao_da_falha', 'Reprocessamento', 'Resolução', true);
 
     // Houve impacto no negócio?
     try {
@@ -328,17 +330,23 @@ async function startServer() {
       await new Promise(resolve => setTimeout(resolve, 60000));
     }
 
-    await context.close();
+    if (context) await context.close();
+    currentContext = null;
     return { success: true, message: 'Incidente processado com sucesso.' };
   } catch (error: any) {
     sendLog(`ERRO: ${error.message}`);
     if (context) await context.close();
+    currentContext = null;
     return { success: false, message: error.message };
   }
 }
 
   app.post('/api/encerrar', async (req, res) => {
     try {
+      if (currentContext) {
+        return res.status(400).json({ success: false, message: 'Uma automação já está em andamento.' });
+      }
+
       const { url, incidente, justificativa, debug } = req.body;
       
       if (!incidente || !justificativa) {
@@ -351,6 +359,22 @@ async function startServer() {
     } catch (error: any) {
       console.error('Erro no endpoint /api/encerrar:', error);
       res.status(500).json({ success: false, message: 'Erro interno no servidor.' });
+    }
+  });
+
+  app.post('/api/parar', async (req, res) => {
+    try {
+      if (currentContext) {
+        sendLog('Comando de parada recebido. Fechando navegador...');
+        await currentContext.close();
+        currentContext = null;
+        res.json({ success: true, message: 'Automação interrompida pelo usuário.' });
+      } else {
+        res.json({ success: false, message: 'Nenhuma automação em execução.' });
+      }
+    } catch (error: any) {
+      console.error('Erro ao parar automação:', error);
+      res.status(500).json({ success: false, message: 'Erro ao interromper a automação.' });
     }
   });
 

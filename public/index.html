@@ -65,9 +65,15 @@
                     </label>
                 </div>
 
-                <button id="submit-btn" type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg shadow-lg shadow-blue-100 transition-all flex items-center justify-center gap-2">
-                    Iniciar Automação
-                </button>
+                <div class="flex gap-2">
+                    <button id="submit-btn" type="submit" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg shadow-lg shadow-blue-100 transition-all flex items-center justify-center gap-2">
+                        Iniciar Automação
+                    </button>
+                    <button id="stop-btn" type="button" class="hidden bg-red-600 hover:bg-red-700 text-white font-bold px-6 py-3 rounded-lg shadow-lg shadow-red-100 transition-all flex items-center justify-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12"></rect></svg>
+                        Parar
+                    </button>
+                </div>
             </form>
 
             <div class="bg-slate-950 p-4 flex flex-col h-[450px]">
@@ -92,6 +98,7 @@
     <script>
         const form = document.getElementById('automation-form');
         const submitBtn = document.getElementById('submit-btn');
+        const stopBtn = document.getElementById('stop-btn');
         const logContainer = document.getElementById('log-container');
         const resultContainer = document.getElementById('result-container');
         const resultTitle = document.getElementById('result-title');
@@ -109,16 +116,27 @@
             
             const timeStr = new Date(data.timestamp).toLocaleTimeString([], { hour12: false });
             const isError = data.message.startsWith('ERRO');
+            const isStop = data.message.includes('interrompida') || data.message.includes('parada');
             
             logLine.innerHTML = `
                 <span class="text-slate-500 shrink-0">[${timeStr}]</span>
-                <span class="break-words ${isError ? 'text-red-400 font-bold' : 'text-blue-300'}">
+                <span class="break-words ${isError ? 'text-red-400 font-bold' : (isStop ? 'text-yellow-400' : 'text-blue-300')}">
                     ${data.message}
                 </span>
             `;
             
             logContainer.appendChild(logLine);
             logContainer.scrollTop = logContainer.scrollHeight;
+        };
+
+        stopBtn.onclick = async () => {
+            try {
+                stopBtn.disabled = true;
+                stopBtn.innerText = 'Parando...';
+                await fetch('/api/parar', { method: 'POST' });
+            } catch (error) {
+                console.error('Erro ao parar:', error);
+            }
         };
 
         form.onsubmit = async (e) => {
@@ -131,6 +149,10 @@
 
             // UI State
             submitBtn.disabled = true;
+            stopBtn.classList.remove('hidden');
+            stopBtn.disabled = false;
+            stopBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12"></rect></svg> Parar';
+            
             submitBtn.innerHTML = '<svg class="animate-spin h-5 w-5 mr-3" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Processando...';
             statusDot.className = 'w-2 h-2 rounded-full bg-yellow-400 animate-pulse';
             statusText.innerText = 'Executando';
@@ -157,6 +179,7 @@
             } finally {
                 submitBtn.disabled = false;
                 submitBtn.innerText = 'Iniciar Automação';
+                stopBtn.classList.add('hidden');
                 statusDot.className = 'w-2 h-2 rounded-full bg-green-400';
                 statusText.innerText = 'Pronto';
             }

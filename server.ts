@@ -94,10 +94,14 @@ async function startServer() {
 
     // 3. Busca
     sendLog(`Buscando incidente: ${numeroIncidente}`);
-    await page.waitForSelector('span.icon-search', { timeout: 30000 });
-    await page.click('span.icon-search');
-    await page.waitForSelector('input#sysparm_search', { timeout: 5000 });
-    await page.fill('input#sysparm_search', numeroIncidente);
+    const searchIcon = page.locator('span.icon-search.sysparm-search-icon, .sysparm-search-icon').filter({ visible: true }).first();
+    await searchIcon.waitFor({ state: 'visible', timeout: 30000 });
+    await searchIcon.click();
+    
+    sendLog('Campo de busca aberto. Inserindo INC...');
+    const searchInput = page.locator('input#sysparm_search');
+    await searchInput.waitFor({ state: 'visible', timeout: 10000 });
+    await searchInput.fill(numeroIncidente);
     await page.keyboard.press('Enter');
 
     // Esperar carregar o incidente (gsft_main iframe)
@@ -185,7 +189,7 @@ async function startServer() {
         return res.status(400).json({ success: false, message: 'Incidente e justificativa são obrigatórios.' });
       }
 
-      const targetUrl = url || 'https://gpabr.service-now.com/';
+      const targetUrl = url || 'https://gpabrqa.service-now.com/';
       const result = await runAutomation(targetUrl, incidente, justificativa, !!debug);
       res.json(result);
     } catch (error: any) {
@@ -197,7 +201,7 @@ async function startServer() {
   // Alias for previous endpoint if needed
   app.post('/api/finalizar', async (req, res) => {
     const { numero_incidente, justificativa, visible } = req.body;
-    const result = await runAutomation('https://gpabr.service-now.com/', numero_incidente, justificativa, !!visible);
+    const result = await runAutomation('https://gpabrqa.service-now.com/', numero_incidente, justificativa, !!visible);
     res.json(result);
   });
 

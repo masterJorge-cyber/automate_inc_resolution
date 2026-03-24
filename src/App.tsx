@@ -8,7 +8,7 @@ interface LogEntry {
 }
 
 export default function App() {
-  const [url, setUrl] = useState('https://gpabr.service-now.com/');
+  const [url, setUrl] = useState('https://gpabrqa.service-now.com/');
   const [incidente, setIncidente] = useState('');
   const [justificativa, setJustificativa] = useState('');
   const [debug, setDebug] = useState(false);

@@ -59,9 +59,9 @@ async function startServer() {
 
     const page: Page = context.pages().length > 0 ? context.pages()[0] : await context.newPage();
     
-    // Removido bringToFront para evitar roubo de foco constante da UI
     if (visible) {
-      sendLog('Modo Debug: Navegador iniciado.');
+      await page.bringToFront();
+      sendLog('Modo Debug: Navegador iniciado em primeiro plano.');
     }
     
     sendLog(`Acessando URL: ${url}`);
@@ -116,28 +116,41 @@ async function startServer() {
     const frame = page.frameLocator('iframe#gsft_main');
     
     // 4. Ação Inicial: Clicar no botão 'Assumir'
-    try {
-      const assumirBtn = frame.locator('button:has-text("Assumir")');
-      await assumirBtn.waitFor({ state: 'visible', timeout: 10000 });
-      await assumirBtn.click();
-      sendLog('Botão Assumir clicado.');
-    } catch (e) {
-      sendLog('Botão Assumir não encontrado ou já assumido.');
-    }
-
-    // 5. Navegação Interna: Clicar na aba "Informações de Fechamento"
-    sendLog('Acessando aba Informações de Fechamento...');
-    await frame.locator('span.tab_caption_text:has-text("Informações de Fechamento")').click();
-
-    // 6. Preenchimento de Campos
-    sendLog('Preenchendo campos de resolução...');
+    sendLog('Aguardando carregamento do incidente...');
+    await page.waitForLoadState('networkidle').catch(() => {});
     
-    // IC Impactado
-    const icInput = frame.locator('input#sys_display\\.incident\\.cmdb_ci');
-    await icInput.waitFor({ state: 'visible', timeout: 10000 });
-    await icInput.fill('Oracle Retail - SIM');
-    await page.keyboard.press('Tab');
-    await page.waitForTimeout(1000);
+    try {
+      // Tentar múltiplos seletores para o botão Assumir
+      const assumirSelectors = [
+        'button#assign_to_me',
+        'button:has-text("Assumir")',
+        'button:has-text("Assign to me")',
+        'button[name="assign_to_me"]',
+        'a:has-text("Assumir")',
+        'a#assign_to_me'
+      ];
+      
+      let clicked = false;
+      for (const selector of assumirSelectors) {
+        const btn = frame.locator(selector).first();
+        if (await btn.isVisible()) {
+          await btn.click();
+          sendLog(`Botão Assumir (${selector}) clicado.`);
+          clicked = true;
+          break;
+        }
+      }
+      
+      if (!clicked) {
+        sendLog('Botão Assumir não encontrado ou já assumido.');
+      } else {
+        // Aguardar recarregamento após assumir
+        await page.waitForLoadState('networkidle').catch(() => {});
+        await page.waitForTimeout(2000);
+      }
+    } catch (e) {
+      sendLog('Erro ao tentar clicar em Assumir.');
+    }
 
     // Função auxiliar para selecionar opção tentando label ou valor
     const safeSelect = async (selector: string, optionLabel: string, logMsg: string) => {
@@ -224,34 +237,44 @@ async function startServer() {
       }
     };
 
+    // 5. Preenchimento de Campos (Ordem solicitada)
+    sendLog('Iniciando preenchimento dos campos...');
+
+    // IC Impactado (Oracle Retail - SIM)
+    try {
+      const icInput = frame.locator('input#sys_display\\.incident\\.cmdb_ci');
+      if (await icInput.isVisible()) {
+        sendLog('Preenchendo IC Impactado: Oracle Retail - SIM');
+        await icInput.clear();
+        await icInput.fill('Oracle Retail - SIM');
+        await page.waitForTimeout(500);
+        await page.keyboard.press('Enter');
+        await page.waitForTimeout(1000);
+      }
+    } catch (e) {
+      sendLog('Aviso: Campo IC Impactado não encontrado.');
+    }
+
+    // Navegação Interna: Clicar na aba "Informações de Fechamento"
+    try {
+      const tabFechamento = frame.locator('span.tab_caption_text:has-text("Informações de Fechamento")');
+      if (await tabFechamento.isVisible()) {
+        await tabFechamento.click();
+        await page.waitForTimeout(500);
+      }
+    } catch (e) {}
+
     // Código de Resolução: 'Resolvido'
     await safeSelect('select#incident\\.close_code', 'Resolvido', 'Código de Resolução');
-    
-    // Aguardar possíveis recarregamentos parciais (AJAX)
     await page.waitForLoadState('networkidle').catch(() => {});
     await page.waitForTimeout(1000);
 
-    // Causa Raiz Identificada: 'Não' ou 'Nao'
-    // Tentar encontrar o campo de causa raiz (pode variar o ID)
+    // Causa Raiz Identificada: 'Não'
     let causaRaizSelector = 'select#incident\\.u_causa_raiz_identificada';
     if (!(await frame.locator(causaRaizSelector).isVisible())) {
-      causaRaizSelector = 'select[id*="causa_raiz"]'; // Seletor mais genérico se o ID exato falhar
+      causaRaizSelector = 'select[id*="causa_raiz"]';
     }
     await safeSelect(causaRaizSelector, 'Não', 'Causa Raiz Identificada');
-
-    // Se houver um campo de "Causa Raiz não identificada" (texto ou select)
-    const causaRaizNaoIdentificada = frame.locator('select#incident\\.u_causa_raiz_nao_identificada, input#incident\\.u_causa_raiz_nao_identificada, textarea#incident\\.u_causa_raiz_nao_identificada');
-    if (await causaRaizNaoIdentificada.isVisible()) {
-      sendLog('Campo Causa Raiz não identificada detectado. Preenchendo...');
-      try {
-        const tagName = await causaRaizNaoIdentificada.evaluate(el => el.tagName.toLowerCase());
-        if (tagName === 'select') {
-          await safeSelect('select#incident\\.u_causa_raiz_nao_identificada', 'Outros', 'Causa Raiz não identificada');
-        } else {
-          await causaRaizNaoIdentificada.fill('Causa não identificada no momento do encerramento.');
-        }
-      } catch (e) {}
-    }
 
     // Classe de Falha: 'Aplicação'
     await fillSmartField('u_classe_falha', 'Aplicação', 'Classe de Falha', true);
@@ -262,13 +285,12 @@ async function startServer() {
     // Resolução: 'Reprocessamento'
     await fillSmartField('u_resolucao', 'Reprocessamento', 'Resolução', true);
 
-    // 7. Campo Especial (Impacto no Negócio)
+    // Houve impacto no negócio?
     sendLog('Tratando campo Impacto no Negócio...');
     const unlockBtn = frame.locator('#incident\\.u_kdl_houve_impacto_no_neg_cio_unlock');
     if (await unlockBtn.isVisible()) {
       await unlockBtn.click();
       const impactSelect = frame.locator('select#choice\\.incident\\.u_kdl_houve_impacto_no_neg_cio');
-      // Tentar selecionar 'NÃO' ou '-- Nenhum --'
       try {
         await impactSelect.selectOption({ label: 'NÃO' });
       } catch (e) {
@@ -276,8 +298,8 @@ async function startServer() {
       }
     }
 
-    // 8. Finalização: Descrição da Resolução
-    sendLog('Inserindo justificativa e finalizando...');
+    // Descrição da Resolução
+    sendLog('Inserindo justificativa...');
     await frame.locator('textarea#incident\\.close_notes').fill(justificativa);
 
     // Salvar/Resolver

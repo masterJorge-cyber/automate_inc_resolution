@@ -14,9 +14,6 @@ export default function App() {
   const [debug, setDebug] = useState(false);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
-  const [logs, setLogs] = useState<LogEntry[]>([]);
-  const logEndRef = useRef<HTMLDivElement>(null);
-
   const logContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

@@ -4,8 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import cors from 'cors';
 import bodyParser from 'body-parser';
-import fs from 'fs';
-import { createServer as createViteServer } from 'vite';
+// Removed Vite imports
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -362,31 +361,13 @@ async function startServer() {
     res.json(result);
   });
 
-  // Vite middleware for development
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares as any);
-  } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    if (fs.existsSync(distPath)) {
-      app.use(express.static(distPath));
-      app.get('*', (req, res) => {
-        const indexPath = path.join(distPath, 'index.html');
-        if (fs.existsSync(indexPath)) {
-          res.sendFile(indexPath);
-        } else {
-          res.status(404).send('Build not found. Please run "npm run build" first.');
-        }
-      });
-    } else {
-      app.get('*', (req, res) => {
-        res.status(404).send('Dist folder not found. Please run "npm run build" first.');
-      });
-    }
-  }
+  // Serve static files from the public folder
+  app.use(express.static(path.join(__dirname, 'public')));
+
+  // Fallback to index.html for SPA behavior
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  });
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
